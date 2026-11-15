@@ -174,8 +174,9 @@ design decisions, and [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md) for trust bou
 
 - Linux (uses `flock(2)` and UNIX-domain sockets; other POSIX systems are untested).
 - Python 3.11, 3.12, 3.13 or 3.14.
-- A running Tor client from your distribution or the Tor Project's repositories (tested
-  against Tor 0.4.8). Tor Rotator does not install or manage Tor.
+- A running Tor client from your distribution or the Tor Project's repositories. The live
+  suite has been run against Tor 0.4.9.15 (Debian 13); the weekly CI live job uses Ubuntu
+  24.04's packaged Tor. Tor Rotator does not install or manage Tor.
 - A CA trust store (`ca-certificates` on Debian/Ubuntu), or `verify.ca_file`.
 
 ## Installation
@@ -354,7 +355,7 @@ A `doctor` report (abridged):
 {
   "healthy": true,
   "checks": [
-    {"name": "control", "ok": true, "detail": "Tor 0.4.8.16"},
+    {"name": "control", "ok": true, "detail": "Tor 0.4.9.15"},
     {"name": "bootstrap", "ok": true, "detail": "100%"},
     {"name": "circuit_established", "ok": true, "detail": "Tor reports a usable circuit"},
     {"name": "network_liveness", "ok": true, "detail": "Tor reports the network up"},
