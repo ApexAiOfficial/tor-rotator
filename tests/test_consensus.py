@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from fakes import EXIT_A, EXIT_B, EXIT_C
 from hypothesis import given
 from hypothesis import strategies as st
 
+from fakes import EXIT_A, EXIT_B, EXIT_C
 from tor_rotator.consensus import evaluate
 from tor_rotator.models import ProviderObservation as Obs
 

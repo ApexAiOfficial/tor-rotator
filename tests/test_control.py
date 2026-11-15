@@ -1,15 +1,15 @@
 from __future__ import annotations
 
 import os
-from contextlib import closing
 import socket
 import threading
+from contextlib import closing
 
 import pytest
-from fakes import FakeTorControl, spec_hashes, tor_escape
 from hypothesis import given
 from hypothesis import strategies as st
 
+from fakes import FakeTorControl, spec_hashes, tor_escape
 from tor_rotator.config import ControlConfig
 from tor_rotator.control import (
     MAX_LINE_BYTES,
@@ -445,3 +445,43 @@ def test_concurrent_clients_are_independent(short_tmp):
         for thread in threads:
             thread.join(10)
     assert results == [True] * 4
+
+
+def test_dangling_escape_inside_quotes():
+    with pytest.raises(ControlError, match="dangling"):
+        unquote('"abc\\"')
+
+
+def test_read_error_and_total_reply_limit(monkeypatch):
+    client, peer = wired(b"")
+    with peer, closing(client):
+        peer.close()
+
+        class Exploding:
+            def readline(self, size):
+                raise OSError("reset by peer")
+
+            def close(self):
+                return None
+
+        client._reader = Exploding()  # type: ignore[assignment]
+        with pytest.raises(ControlError, match="reset by peer"):
+            client._readline()
+        with pytest.raises(ControlError, match="not usable"):
+            client._readline()
+
+    monkeypatch.setattr("tor_rotator.control.MAX_REPLY_BYTES", 32)
+    client, peer = wired(b"250-" + b"a" * 20 + b"\r\n250-" + b"b" * 20 + b"\r\n250 OK\r\n")
+    with peer, closing(client), pytest.raises(ControlError, match="reply exceeded"):
+        client._read_reply()
+
+
+def test_status_reraises_non_552_errors(monkeypatch):
+    client = TorControlClient(ControlConfig())
+
+    def fail(*keys):
+        raise ControlCommandError(551, "internal error")
+
+    monkeypatch.setattr(client, "getinfo", fail)
+    with pytest.raises(ControlCommandError, match="551"):
+        client.status()

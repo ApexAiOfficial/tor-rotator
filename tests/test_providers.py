@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import pytest
-from fakes import EXIT_A
 
+from fakes import EXIT_A
 from tor_rotator.config import CustomProvider
 from tor_rotator.providers import (
     BUILTIN_PROVIDERS,

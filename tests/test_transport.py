@@ -4,8 +4,8 @@ import ssl
 import time
 
 import pytest
-from fakes import EXIT_A, EchoResponse
 
+from fakes import EXIT_A, EchoResponse
 from tor_rotator.errors import ProbeError, ProbeTimeoutError, ProxyError
 from tor_rotator.socks import SocksEndpoint
 from tor_rotator.transport import MAX_BODY_BYTES, _Deadline, create_ssl_context, https_get

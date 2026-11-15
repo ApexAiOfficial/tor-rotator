@@ -4,8 +4,8 @@ import socket
 import threading
 
 import pytest
-from fakes import FakeSocks
 
+from fakes import FakeSocks
 from tor_rotator.config import SocksConfig
 from tor_rotator.errors import ProxyError
 from tor_rotator.socks import SocksEndpoint, encode_address, open_connection
@@ -158,3 +158,35 @@ def test_missing_unix_socket(short_tmp):
     config = SocksConfig(mode="unix", socket_path=str(short_tmp / "absent"))
     with pytest.raises(ProxyError, match="cannot connect"):
         open_connection(SocksEndpoint.from_config(config), "example.org", 443, timeout=1)
+
+
+def test_malformed_connect_reply_version():
+    peer_server = socket.socket()
+    peer_server.bind(("127.0.0.1", 0))
+    peer_server.listen(1)
+    port = peer_server.getsockname()[1]
+
+    def serve() -> None:
+        conn, _ = peer_server.accept()
+        with conn:
+            conn.recv(3)
+            conn.sendall(b"\x05\x02")
+            conn.recv(64)
+            conn.sendall(b"\x01\x00")
+            conn.recv(64)
+            conn.sendall(b"\x04\x00\x00\x01")
+
+    thread = threading.Thread(target=serve)
+    thread.start()
+    with peer_server, pytest.raises(ProxyError, match="malformed SOCKS5 CONNECT reply"):
+        open_connection(SocksEndpoint("tcp", "127.0.0.1", port, "", "u", "p"), "example.org", 443, timeout=3)
+    thread.join(5)
+
+
+def test_is_loopback_address():
+    from tor_rotator._net import is_loopback_address
+
+    assert is_loopback_address("127.0.0.1")
+    assert is_loopback_address("::1%lo")
+    assert not is_loopback_address("not-an-ip")
+    assert not is_loopback_address("8.8.8.8")

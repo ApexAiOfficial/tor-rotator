@@ -9,8 +9,8 @@ from pathlib import Path
 
 import pytest
 import trustme
-from fakes import FakeHttps, FakeSocks, FakeTorControl
 
+from fakes import FakeHttps, FakeSocks, FakeTorControl
 from tor_rotator.config import AppConfig, RotationConfig, RuntimeConfig, SocksConfig, VerifyConfig
 
 

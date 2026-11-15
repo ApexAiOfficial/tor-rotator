@@ -4,9 +4,9 @@ import json
 import os
 
 import pytest
+
 from conftest import offline_config, runtime_for
 from fakes import EXIT_A, EXIT_B, FakeTorControl
-
 from tor_rotator.config import RotationConfig, SocksConfig, VerifyConfig
 from tor_rotator.errors import ControlError, ExitCode, LockBusyError
 from tor_rotator.lock import ProcessLock
@@ -446,7 +446,6 @@ def test_watch_does_not_start_when_already_stopped(tmp_path):
 
 def test_unix_socket_full_stack(short_tmp, echo, ca_file):
     from fakes import FakeSocks
-
     from tor_rotator.config import AppConfig
 
     control_dir = short_tmp / "c"

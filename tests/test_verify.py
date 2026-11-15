@@ -3,8 +3,8 @@ from __future__ import annotations
 import json
 
 import pytest
-from fakes import EXIT_A, EXIT_B, EchoResponse
 
+from fakes import EXIT_A, EXIT_B, EchoResponse
 from tor_rotator.config import SocksConfig, VerifyConfig
 from tor_rotator.errors import ConfigurationError, ProbeTimeoutError
 from tor_rotator.transport import HttpResponse

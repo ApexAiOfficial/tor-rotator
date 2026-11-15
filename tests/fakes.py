@@ -198,7 +198,9 @@ class FakeTorControl(ThreadedServer):
             "status/circuit-established": "1",
             "network-liveness": "up",
             "net/listeners/socks": '"127.0.0.1:9050"',
-            "circuit-status": "1 BUILT $A~a,$B~b,$C~c PURPOSE=GENERAL\n2 BUILT $D~d,$E~e,$F~f PURPOSE=GENERAL",
+            "circuit-status": (
+                "1 BUILT $A~a,$B~b,$C~c PURPOSE=GENERAL\n2 BUILT $D~d,$E~e,$F~f PURPOSE=GENERAL"
+            ),
         }
         if getinfo is not None:
             self.getinfo.update(getinfo)
@@ -220,7 +222,7 @@ class FakeTorControl(ThreadedServer):
         with conn.makefile("rb") as reader:
             self._session(conn, reader)
 
-    def _session(self, conn: socket.socket, reader: Any) -> None:  # noqa: PLR0912
+    def _session(self, conn: socket.socket, reader: Any) -> None:
         authenticated = False
         client_nonce: bytes | None = None
         server_nonce: bytes | None = None
