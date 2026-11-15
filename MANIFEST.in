@@ -1,0 +1,8 @@
+# The source distribution carries everything needed to test and deploy, not just the package.
+include CHANGELOG.md CODE_OF_CONDUCT.md CONTRIBUTING.md SECURITY.md config.example.toml
+include requirements/dev.txt
+recursive-include docs *.md
+recursive-include deploy *
+recursive-include scripts *.sh *.py
+recursive-include tests *.py
+global-exclude __pycache__ *.py[cod]
