@@ -1,0 +1,14 @@
+# Rotate every 10 minutes with up to 60 s of randomised delay (avoids a fixed cadence).
+
+[Unit]
+Description=Tor Rotator - scheduled verified rotation
+Documentation=https://github.com/ApexAiOfficial/tor-rotator
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=10min
+RandomizedDelaySec=60s
+AccuracySec=1s
+
+[Install]
+WantedBy=timers.target

@@ -143,3 +143,59 @@ def test_end_to_end_custom_provider(socks, echo, ca_file):
     result = ExitVerifier(socks.socks_config(), config).verify()
     assert result.ok, result.error
     assert any(r["path"] == "/whoami" for r in echo.requests)
+
+
+# --- Re-sampling on disagreement (observed live: Tor can move one stream to another circuit)
+
+
+class Rounds:
+    def __init__(self, *rounds):
+        self.rounds = list(rounds)
+        self.calls = 0
+
+    def __call__(self, url):
+        self.calls += 1
+        current = self.rounds[0] if len(self.rounds) == 1 else self.rounds[(self.calls - 1) // 3]
+        return fetcher(current)(url)
+
+
+def test_split_round_is_resampled_and_converges():
+    rounds = Rounds(
+        standard(ip_tor=EXIT_A, ip_ipify=EXIT_B, ip_text=EXIT_B), standard(EXIT_B, EXIT_B, EXIT_B)
+    )
+    result = ExitVerifier(SocksConfig(), VerifyConfig(), fetch=rounds).verify()
+    assert result.ok
+    assert result.ip == EXIT_B
+    assert result.rounds == 2
+    assert rounds.calls == 6
+
+
+def test_persistent_split_fails_after_max_rounds():
+    rounds = Rounds(standard(ip_tor=EXIT_A, ip_ipify=EXIT_A, ip_text=EXIT_B))
+    result = ExitVerifier(SocksConfig(), VerifyConfig(max_rounds=3), fetch=rounds).verify()
+    assert not result.ok
+    assert result.rounds == 3
+    assert rounds.calls == 9
+
+
+def test_tor_negative_is_never_resampled():
+    rounds = Rounds(standard(ip_tor=EXIT_A, ip_ipify=EXIT_B, ip_text=EXIT_B, is_tor=False))
+    result = ExitVerifier(SocksConfig(), VerifyConfig(), fetch=rounds).verify()
+    assert not result.ok
+    assert result.rounds == 1
+
+
+def test_provider_failures_are_not_resampled():
+    answers = standard()
+    answers["ipify"] = ProbeTimeoutError("deadline")
+    answers["icanhazip"] = ProbeTimeoutError("deadline")
+    result = ExitVerifier(SocksConfig(), VerifyConfig(), fetch=fetcher(answers)).verify()
+    assert not result.ok
+    assert result.rounds == 1
+
+
+def test_single_round_configuration():
+    rounds = Rounds(standard(ip_tor=EXIT_A, ip_ipify=EXIT_A, ip_text=EXIT_B))
+    result = ExitVerifier(SocksConfig(), VerifyConfig(max_rounds=1), fetch=rounds).verify()
+    assert result.rounds == 1
+    assert rounds.calls == 3

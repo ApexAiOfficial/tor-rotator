@@ -138,7 +138,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["PT018", "SIM117", "RUF043", "RUF059", "S101", "S105", "S106", "S108", "PLR2004", "ARG001", "ARG002", "ARG005", "PLC0415", "BLE001", "S104", "T20", "SIM115", "N802", "PT011", "TRY002"]
+"tests/**" = ["S603", "PT018", "SIM117", "RUF043", "RUF059", "S101", "S105", "S106", "S108", "PLR2004", "ARG001", "ARG002", "ARG005", "PLC0415", "BLE001", "S104", "T20", "SIM115", "N802", "PT011", "TRY002"]
 "scripts/**" = ["T20", "S603", "S607"]
 
 [tool.ruff.lint.isort]

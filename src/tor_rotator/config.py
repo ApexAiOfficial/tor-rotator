@@ -108,6 +108,8 @@ class VerifyConfig:
     timeout_seconds: float = 15.0
     attempts_after_rotation: int = 4
     retry_delay_seconds: float = 2.0
+    # Sampling rounds per verification when providers disagree (see consensus.resample).
+    max_rounds: int = 3
     providers: tuple[str, ...] = ("torproject", "ipify", "icanhazip")
     ca_file: str | None = None
     custom_providers: tuple[CustomProvider, ...] = ()
@@ -309,6 +311,7 @@ class AppConfig:
             1 <= v.attempts_after_rotation <= 20,
             "verify.attempts_after_rotation must be 1..20",
         )
+        _require(1 <= v.max_rounds <= 10, "verify.max_rounds must be 1..10")
         _require(
             0 <= v.retry_delay_seconds <= 300,
             "verify.retry_delay_seconds must be in [0, 300]",

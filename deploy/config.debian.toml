@@ -1,0 +1,40 @@
+# Tor Rotator for Debian/Ubuntu's packaged Tor: zero torrc changes required.
+#
+# The Debian `tor` package already provides, via /usr/share/tor/tor-service-defaults-torrc:
+#   ControlSocket /run/tor/control GroupWritable RelaxDirModeCheck
+#   SocksPort unix:/run/tor/socks WorldWritable
+#   CookieAuthentication 1, CookieAuthFileGroupReadable 1,
+#   CookieAuthFile /run/tor/control.authcookie
+#
+# The service account only needs membership of the `debian-tor` group. Because both the
+# control and SOCKS connections are UNIX sockets, the systemd unit in deploy/systemd can
+# run with PrivateNetwork=yes: the service has no network access of its own at all.
+#
+# Install as /etc/tor-rotator/config.toml (mode 0640, root:tor-rotator).
+
+[control]
+mode = "unix"
+socket_path = "/run/tor/control"
+auth = "safecookie"
+cookie_path = "/run/tor/control.authcookie"
+
+[socks]
+mode = "unix"
+socket_path = "/run/tor/socks"
+
+[verify]
+quorum = 2
+require_unanimous = true
+require_tor_confirmation = true
+providers = ["torproject", "ipify", "icanhazip"]
+
+[rotation]
+interval_seconds = 600
+jitter_seconds = 60
+max_consecutive_failures = 10
+
+[runtime]
+state_file = "/var/lib/tor-rotator/state.json"
+lock_file = "/var/lib/tor-rotator/rotate.lock"
+log_format = "json"
+log_level = "INFO"

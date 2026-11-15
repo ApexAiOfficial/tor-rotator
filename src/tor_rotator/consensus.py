@@ -40,6 +40,19 @@ class ConsensusOutcome:
     dissenting: int
     responded: int
     error: str | None
+    split: bool = False
+    """Providers reported different IPs (a tie, or any dissent)."""
+
+    @property
+    def resample(self) -> bool:
+        """Whether another sampling round could legitimately change the outcome.
+
+        True for a failure caused by disagreement alone. Tor can move individual streams of
+        one isolation bucket onto different circuits (for example after an exit refuses a
+        destination); it then prefers the most recently used circuit, so a fresh sequential
+        round normally converges on one exit. A Tor-negative result is never re-sampled.
+        """
+        return not self.ok and self.split and self.tor_confirmed is not False
 
 
 def evaluate(
@@ -111,4 +124,5 @@ def evaluate(
         dissenting=dissenting,
         responded=responded,
         error="; ".join(failures) or None,
+        split=len(ranked) > 1,
     )

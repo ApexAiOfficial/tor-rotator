@@ -1,0 +1,95 @@
+# Tor Rotator configuration reference.
+#
+# Every key is shown with its built-in default. Omit any key to keep the default.
+# Unknown keys and wrongly-typed values are rejected. TOML has no null: optional keys
+# that default to "unset" are shown commented out.
+#
+# Debian/Ubuntu users: deploy/config.debian.toml uses Tor's packaged UNIX sockets and
+# needs no torrc changes at all.
+
+[control]
+# How to reach Tor's control interface: "tcp" (loopback ControlPort) or "unix" (ControlSocket).
+mode = "tcp"
+# TCP mode only. Must be loopback (127.0.0.0/8, ::1 or localhost); resolved addresses are
+# checked again at connect time.
+host = "127.0.0.1"
+port = 9051
+# UNIX mode only.
+socket_path = "/run/tor/control"
+# Authentication policy: "auto" prefers SAFECOOKIE, then HASHEDPASSWORD (if a password is
+# configured), then NULL (only if allow_null_auth). Pin "safecookie" or "hashedpassword" to
+# make a downgrade by an impostor listener impossible.
+auth = "auto"
+# Optionally pin the cookie file Tor must advertise (e.g. "/run/tor/control.authcookie").
+# cookie_path = "/run/tor/control.authcookie"
+# HASHEDPASSWORD secrets never live in this file. Use ONE of:
+# password_env = "TOR_ROTATOR_CONTROL_PASSWORD"
+# password_file = "${CREDENTIALS_DIRECTORY}/tor-control-password"   # systemd LoadCredential=
+# Unauthenticated control access is refused unless explicitly allowed.
+allow_null_auth = false
+connect_timeout_seconds = 5.0
+# How long to wait for Tor to confirm it applied NEWNYM. Tor defers (does not drop) a NEWNYM
+# sent within 10 s of the previous one, so this should exceed 10.
+signal_event_timeout_seconds = 12.0
+
+[socks]
+# The Tor SOCKS listener used for verification probes: "tcp" or "unix".
+mode = "tcp"
+host = "127.0.0.1"
+port = 9050
+socket_path = "/run/tor/socks"
+# Stable SOCKS credentials: Tor isolates circuits by SOCKS credentials (IsolateSOCKSAuth is
+# on by default), so probes share one circuit with each other and never with applications.
+# These are isolation labels, not secrets.
+probe_username = "tor-rotator-probe"
+probe_password = "fixed-probe-isolation"
+# A non-loopback SOCKS host (e.g. a Tor sidecar container) must be allowed explicitly.
+allow_non_loopback = false
+
+[verify]
+# Providers that must agree on the exit IP.
+quorum = 2
+# Fail if any responding provider reports a different IP (recommended).
+require_unanimous = true
+# Require check.torproject.org to confirm the *consensus* IP is a Tor exit.
+require_tor_confirmation = true
+# Total deadline per provider probe (SOCKS + circuit + TLS + HTTP).
+timeout_seconds = 15.0
+# Post-rotation verification attempts and the delay between them.
+attempts_after_rotation = 4
+retry_delay_seconds = 2.0
+# Sampling rounds per verification when providers disagree. Tor can move a single probe stream
+# to another circuit (e.g. when an exit refuses a destination); a fresh sequential round
+# normally converges on one exit. Tor-negative results are never re-sampled.
+max_rounds = 3
+# Built-in providers: torproject (Tor-authoritative), ipify, icanhazip, aws.
+providers = ["torproject", "ipify", "icanhazip"]
+# Extra CA bundle (PEM) instead of the system trust store.
+# ca_file = "/etc/ssl/certs/ca-certificates.crt"
+
+# Custom IP-echo providers (for example a self-hosted endpoint). Reference them by name in
+# `providers`. format = "text" (bare IP) or "json" (with json_field; dots address nesting).
+# [verify.custom_providers.self-hosted]
+# url = "https://ip.example.org/"
+# format = "text"
+
+[rotation]
+# Scheduler interval for `watch` (seconds, >= 10).
+interval_seconds = 600.0
+# Uniform random extra delay in [0, jitter_seconds) per cycle; avoids a predictable cadence.
+jitter_seconds = 0.0
+# Pause after a confirmed NEWNYM before verifying.
+settle_seconds = 1.0
+# NEWNYM requests clean circuits; it does not promise a different public IP. Only set this when
+# your application genuinely requires a verified IP change.
+require_exit_change = false
+# `watch` exits non-zero after this many consecutive failed rotations (0 = never).
+max_consecutive_failures = 0
+
+[runtime]
+state_file = "/var/lib/tor-rotator/state.json"
+lock_file = "/var/lib/tor-rotator/rotate.lock"
+# Prometheus textfile-collector output (no exit IPs are exported).
+# metrics_file = "/var/lib/prometheus/node-exporter/tor_rotator.prom"
+log_format = "json"
+log_level = "INFO"

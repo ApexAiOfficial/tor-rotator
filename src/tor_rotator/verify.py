@@ -1,9 +1,15 @@
 """Independent exit verification: query providers through Tor, then apply consensus.
 
 Probes run **sequentially** on purpose. They share one SOCKS isolation bucket, so the
-first probe causes Tor to build (or select) a circuit and the rest reuse it. Concurrent
-first requests right after ``NEWNYM`` can make Tor build several circuits at once, which
-would produce exactly the disagreement that strict consensus rejects.
+first probe causes Tor to build (or select) a circuit and the rest normally reuse it.
+Concurrent first requests right after ``NEWNYM`` can make Tor build several circuits at
+once, which would produce exactly the disagreement that strict consensus rejects.
+
+Sharing a bucket does not *pin* a circuit, though: Tor may move an individual stream to
+another circuit (for instance when an exit refuses a destination), so providers can
+legitimately disagree. Live testing showed this right after bootstrap. A disagreement-only
+failure is therefore re-sampled with a fresh sequential round (``verify.max_rounds``); Tor
+prefers the most recently used circuit, so the next round normally converges on one exit.
 """
 
 from __future__ import annotations
@@ -50,16 +56,24 @@ class ExitVerifier:
         return tuple(p.name for p in self._providers)
 
     def verify(self) -> VerificationResult:
-        """Run one verification round. Never raises for network/provider failures."""
+        """Verify the exit, re-sampling (up to ``max_rounds``) only when providers disagree.
+
+        Never raises for network or provider failures; those become observations.
+        """
         fetch = self._fetch or self._default_fetch()
         started = self._clock()
-        observations = tuple(self._probe(p, fetch) for p in self._providers)
-        outcome = consensus.evaluate(
-            observations,
-            quorum=self.config.quorum,
-            require_unanimous=self.config.require_unanimous,
-            require_tor_confirmation=self.config.require_tor_confirmation,
-        )
+        rounds = 0
+        while True:
+            rounds += 1
+            observations = tuple(self._probe(p, fetch) for p in self._providers)
+            outcome = consensus.evaluate(
+                observations,
+                quorum=self.config.quorum,
+                require_unanimous=self.config.require_unanimous,
+                require_tor_confirmation=self.config.require_tor_confirmation,
+            )
+            if not outcome.resample or rounds >= self.config.max_rounds:
+                break
         return VerificationResult(
             ok=outcome.ok,
             ip=outcome.ip,
@@ -72,6 +86,7 @@ class ExitVerifier:
             observations=observations,
             duration_ms=_ms(self._clock() - started),
             error=outcome.error,
+            rounds=rounds,
         )
 
     def _default_fetch(self) -> Fetch:

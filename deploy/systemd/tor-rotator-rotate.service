@@ -1,0 +1,64 @@
+# Tor Rotator, one rotation per activation: pair with tor-rotator-rotate.timer as an
+# alternative to the long-running tor-rotator.service. Use one or the other, not both.
+# Hardening matches tor-rotator.service; see that file for the rationale.
+
+[Unit]
+Description=Tor Rotator - one verified Tor circuit rotation
+Documentation=https://github.com/ApexAiOfficial/tor-rotator
+Wants=tor.service
+After=tor.service tor@default.service
+
+[Service]
+Type=oneshot
+User=tor-rotator
+Group=tor-rotator
+SupplementaryGroups=debian-tor
+ExecStart=/opt/tor-rotator/venv/bin/tor-rotator --config /etc/tor-rotator/config.toml rotate
+# Exit 5 means another rotation held the lock: nothing changed, not a failure.
+SuccessExitStatus=5
+TimeoutStartSec=300s
+Environment=PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
+
+StateDirectory=tor-rotator
+StateDirectoryMode=0750
+UMask=0027
+
+PrivateNetwork=yes
+RestrictAddressFamilies=AF_UNIX
+IPAddressDeny=any
+
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictSUIDSGID=yes
+SecureBits=noroot-locked
+LockPersonality=yes
+KeyringMode=private
+RemoveIPC=yes
+
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+DevicePolicy=closed
+ProtectProc=invisible
+ProcSubset=pid
+ReadOnlyPaths=/etc/tor-rotator
+
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+MemoryDenyWriteExecute=yes
+
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources @mount @swap @reboot @raw-io @module @obsolete @cpu-emulation @debug
+SystemCallErrorNumber=EPERM
+
+TasksMax=32
+MemoryMax=256M

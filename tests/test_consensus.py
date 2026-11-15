@@ -176,3 +176,14 @@ def test_consensus_invariants(observations, quorum, unanimous, require_tor):
         assert outcome.ip is None
         assert outcome.error
     assert outcome.agreeing + outcome.dissenting == outcome.responded == len(successes)
+
+
+def test_resample_flag():
+    split = run([tor(EXIT_A), plain("ipify", EXIT_B), plain("icanhazip", EXIT_B)])
+    assert split.split and split.resample
+    negative = run([tor(EXIT_A, is_tor=False), plain("ipify", EXIT_B)], require_tor=False)
+    assert negative.split and not negative.resample
+    clean = run([tor(EXIT_A), plain("ipify", EXIT_A)])
+    assert not clean.split and not clean.resample
+    starved = run([tor(EXIT_A), failed("ipify")])
+    assert not starved.split and not starved.resample

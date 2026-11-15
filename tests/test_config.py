@@ -191,6 +191,8 @@ def test_integer_is_accepted_for_float_fields():
         ({"verify": {"timeout_seconds": 0}}, "timeout_seconds"),
         ({"verify": {"attempts_after_rotation": 0}}, "attempts_after_rotation"),
         ({"verify": {"attempts_after_rotation": 21}}, "attempts_after_rotation"),
+        ({"verify": {"max_rounds": 0}}, "max_rounds"),
+        ({"verify": {"max_rounds": 11}}, "max_rounds"),
         ({"verify": {"retry_delay_seconds": -1}}, "retry_delay"),
         ({"verify": {"ca_file": "relative.pem"}}, "ca_file must be absolute"),
         ({"rotation": {"interval_seconds": 1}}, "interval_seconds"),

@@ -1,0 +1,88 @@
+# Tor Rotator: verified circuit rotation on a schedule (long-running `watch` mode).
+#
+# This unit is written for deploy/config.debian.toml, where both the Tor control
+# connection and the SOCKS probes use UNIX sockets. That allows PrivateNetwork=yes: the
+# service gets an empty network namespace and cannot send a single packet except through
+# Tor's sockets. For TCP control/SOCKS on loopback, add deploy/systemd/tcp-loopback.conf
+# as a drop-in.
+#
+# Install:
+#   systemd-sysusers deploy/sysusers/tor-rotator.conf
+#   install -m 0644 deploy/systemd/tor-rotator.service /etc/systemd/system/
+#   systemctl daemon-reload && systemctl enable --now tor-rotator.service
+# Review:
+#   systemd-analyze security tor-rotator.service
+
+[Unit]
+Description=Tor Rotator - verified Tor circuit rotation
+Documentation=https://github.com/ApexAiOfficial/tor-rotator
+Wants=tor.service
+After=tor.service tor@default.service
+StartLimitIntervalSec=600
+StartLimitBurst=5
+
+[Service]
+Type=exec
+User=tor-rotator
+Group=tor-rotator
+# Debian/Ubuntu: the control socket and auth cookie are group-accessible to debian-tor.
+# Other distributions: use the group that owns Tor's control socket/cookie.
+SupplementaryGroups=debian-tor
+ExecStart=/opt/tor-rotator/venv/bin/tor-rotator --config /etc/tor-rotator/config.toml watch
+Restart=on-failure
+RestartSec=30s
+TimeoutStopSec=60s
+Environment=PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
+
+StateDirectory=tor-rotator
+StateDirectoryMode=0750
+UMask=0027
+
+# --- Network: UNIX sockets only -----------------------------------------------------------
+PrivateNetwork=yes
+RestrictAddressFamilies=AF_UNIX
+IPAddressDeny=any
+
+# --- Privileges ----------------------------------------------------------------------------
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictSUIDSGID=yes
+SecureBits=noroot-locked
+LockPersonality=yes
+KeyringMode=private
+RemoveIPC=yes
+
+# --- Filesystem ----------------------------------------------------------------------------
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+DevicePolicy=closed
+ProtectProc=invisible
+ProcSubset=pid
+ReadOnlyPaths=/etc/tor-rotator
+
+# --- Kernel and namespaces -----------------------------------------------------------------
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+MemoryDenyWriteExecute=yes
+
+# --- System calls --------------------------------------------------------------------------
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources @mount @swap @reboot @raw-io @module @obsolete @cpu-emulation @debug
+SystemCallErrorNumber=EPERM
+
+# --- Resource ceilings ---------------------------------------------------------------------
+TasksMax=32
+MemoryMax=256M
+
+[Install]
+WantedBy=multi-user.target

@@ -52,6 +52,8 @@ class VerificationResult:
     checked_at: str = field(default_factory=utc_now_iso)
     duration_ms: int | None = None
     error: str | None = None
+    rounds: int = 1
+    """Sampling rounds used; more than one means earlier rounds disagreed."""
 
     def to_dict(self) -> dict[str, Any]:
         data = asdict(self)
