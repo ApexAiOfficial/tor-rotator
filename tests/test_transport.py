@@ -127,3 +127,38 @@ def test_deadline_guard_after_expiry_shuts_socket_immediately():
             assert a.recv(1) == b""
             with pytest.raises(ProbeTimeoutError):
                 deadline.remaining()
+
+
+def test_total_deadline_covers_socks_negotiation():
+    import socket
+    import threading
+
+    listener = socket.socket()
+    listener.bind(("127.0.0.1", 0))
+    listener.listen(1)
+    done = threading.Event()
+
+    def trickle() -> None:
+        conn, _ = listener.accept()
+        with conn:
+            conn.recv(3)
+            conn.sendall(b"\x05")  # half a greeting, then stall
+            done.wait(5)
+
+    thread = threading.Thread(target=trickle)
+    thread.start()
+    started = time.monotonic()
+    try:
+        with pytest.raises(ProbeTimeoutError):
+            https_get(
+                "https://api.ipify.org/",
+                endpoint=SocksEndpoint("tcp", "127.0.0.1", listener.getsockname()[1], "", "u", "p"),
+                ssl_context=create_ssl_context(),
+                timeout=0.5,
+                user_agent="x",
+            )
+        assert time.monotonic() - started < 2.0
+    finally:
+        done.set()
+        thread.join(5)
+        listener.close()

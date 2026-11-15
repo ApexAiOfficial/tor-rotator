@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import ipaddress
 import socket
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Final
 
@@ -79,8 +80,13 @@ def open_connection(
     dest_port: int,
     *,
     timeout: float,
+    on_connect: Callable[[socket.socket], None] | None = None,
 ) -> socket.socket:
-    """Return a socket tunnelled through the proxy to *dest_host*:*dest_port*."""
+    """Return a socket tunnelled through the proxy to *dest_host*:*dest_port*.
+
+    *on_connect* receives the socket as soon as it is connected, before negotiation, so a
+    caller's deadline watchdog also covers the SOCKS handshake.
+    """
     if endpoint.mode == "unix":
         sock = connect_unix(endpoint.socket_path, timeout=timeout, error=ProxyError, purpose="SOCKS")
     else:
@@ -93,6 +99,8 @@ def open_connection(
             purpose="SOCKS proxy",
         )
     try:
+        if on_connect is not None:
+            on_connect(sock)
         _handshake(sock, endpoint, dest_host, dest_port)
     except BaseException:
         sock.close()

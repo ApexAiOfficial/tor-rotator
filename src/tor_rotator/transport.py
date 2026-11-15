@@ -127,8 +127,9 @@ def https_get(
     conn: http.client.HTTPSConnection | None = None
     with _Deadline(timeout) as deadline:
         try:
-            raw = socks.open_connection(endpoint, host, port, timeout=deadline.remaining())
-            deadline.guard(raw)
+            raw = socks.open_connection(
+                endpoint, host, port, timeout=deadline.remaining(), on_connect=deadline.guard
+            )
             raw.settimeout(deadline.remaining())
             deadline.release()  # wrap_socket() takes ownership of the descriptor
             tls = ssl_context.wrap_socket(raw, server_hostname=host)
