@@ -30,7 +30,7 @@ def connect_tcp(
     connection off-host.
     """
     try:
-        candidates = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
+        candidates = socket.getaddrinfo(host.strip("[]"), port, type=socket.SOCK_STREAM)
     except OSError as exc:
         raise error(f"cannot resolve {purpose} host {host!r}: {exc}") from exc
     failures: list[str] = []

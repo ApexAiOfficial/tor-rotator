@@ -42,6 +42,7 @@ class ExitVerifier:
         *,
         fetch: Fetch | None = None,
         clock: Callable[[], float] = time.monotonic,
+        cancelled: Callable[[], bool] | None = None,
     ) -> None:
         self.socks = socks
         self.config = config
@@ -49,7 +50,14 @@ class ExitVerifier:
         self._endpoint = SocksEndpoint.from_config(socks)
         self._fetch = fetch
         self._clock = clock
+        self._cancelled = cancelled or (lambda: False)
         self._ssl_context: ssl.SSLContext | None = None
+        if fetch is None:
+            # Fail fast on a broken trust store instead of on the first rotation.
+            try:
+                self._ssl_context = create_ssl_context(config.ca_file)
+            except (OSError, ValueError) as exc:
+                raise ConfigurationError(f"cannot load TLS trust store: {exc}") from exc
 
     @property
     def provider_names(self) -> tuple[str, ...]:
@@ -66,6 +74,8 @@ class ExitVerifier:
         while True:
             rounds += 1
             observations = tuple(self._probe(p, fetch) for p in self._providers)
+            if self._cancelled():
+                break
             outcome = consensus.evaluate(
                 observations,
                 quorum=self.config.quorum,
@@ -90,12 +100,9 @@ class ExitVerifier:
         )
 
     def _default_fetch(self) -> Fetch:
-        if self._ssl_context is None:
-            try:
-                self._ssl_context = create_ssl_context(self.config.ca_file)
-            except (OSError, ValueError) as exc:
-                raise ConfigurationError(f"cannot load TLS trust store: {exc}") from exc
         context = self._ssl_context
+        if context is None:  # pragma: no cover - set in __init__ whenever fetch is None
+            raise ConfigurationError("TLS trust store was not loaded")
 
         def fetch(url: str) -> HttpResponse:
             return https_get(
@@ -109,12 +116,16 @@ class ExitVerifier:
         return fetch
 
     def _probe(self, provider: providers.Provider, fetch: Fetch) -> ProviderObservation:
+        if self._cancelled():
+            return ProviderObservation(provider=provider.name, ok=False, error="cancelled: stop requested")
         started = self._clock()
         try:
             response = fetch(provider.url)
             if response.status != 200:
                 raise ValueError(f"HTTP {response.status} {response.reason}".strip())
             ip, is_tor = provider.parser(response.body)
+            if not provider.tor_authority:
+                is_tor = None  # only a Tor-authoritative provider may vouch for (or against) Tor
         except (TorRotatorError, OSError, http.client.HTTPException, ValueError) as exc:
             return ProviderObservation(
                 provider=provider.name,

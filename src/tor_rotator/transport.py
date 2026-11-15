@@ -14,8 +14,10 @@ from __future__ import annotations
 
 import contextlib
 import http.client
+import os
 import socket
 import ssl
+import stat
 import threading
 import time
 from dataclasses import dataclass
@@ -38,11 +40,38 @@ class HttpResponse:
     body: bytes
 
 
+MAX_CA_FILE_BYTES: Final = 4 * 1024 * 1024
+
+
 def create_ssl_context(ca_file: str | None = None) -> ssl.SSLContext:
-    """A verifying client context: system trust store (or *ca_file*), TLS >= 1.2."""
-    context = ssl.create_default_context(cafile=ca_file)
+    """A verifying client context: system trust store (or *ca_file*), TLS >= 1.2.
+
+    A configured CA file is a trust anchor, so it gets the same care as other local files:
+    it must be a regular file, not writable by other users, and of bounded size.
+
+    :raises ValueError: the CA file is unsafe or not valid PEM.
+    :raises OSError: the CA file cannot be read.
+    """
+    cadata = None if ca_file is None else _read_ca_file(ca_file)
+    context = ssl.create_default_context(cadata=cadata)
     context.minimum_version = ssl.TLSVersion.TLSv1_2
     return context
+
+
+def _read_ca_file(path: str) -> str:
+    fd = os.open(path, os.O_RDONLY | os.O_CLOEXEC)
+    try:
+        info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode):
+            raise ValueError(f"CA file {path} is not a regular file")
+        if info.st_mode & stat.S_IWOTH:
+            raise ValueError(f"refusing world-writable CA file {path}")
+        data = os.read(fd, MAX_CA_FILE_BYTES + 1)
+    finally:
+        os.close(fd)
+    if len(data) > MAX_CA_FILE_BYTES:
+        raise ValueError(f"CA file {path} exceeds {MAX_CA_FILE_BYTES} bytes")
+    return data.decode("ascii")
 
 
 class _Deadline:
@@ -132,9 +161,10 @@ def https_get(
             )
             raw.settimeout(deadline.remaining())
             deadline.release()  # wrap_socket() takes ownership of the descriptor
-            tls = ssl_context.wrap_socket(raw, server_hostname=host)
+            tls = ssl_context.wrap_socket(raw, server_hostname=host, do_handshake_on_connect=False)
             raw = None
-            deadline.guard(tls)
+            deadline.guard(tls)  # the watchdog also covers the TLS handshake
+            tls.do_handshake()
             conn = http.client.HTTPSConnection(host, port, timeout=timeout, context=ssl_context)
             conn.sock = tls
             conn.request(
@@ -149,6 +179,8 @@ def https_get(
             body = response.read(max_body + 1)
             if len(body) > max_body:
                 raise ProbeError(f"response body exceeded the {max_body}-byte limit")
+            if declared is not None and declared.strip().isdigit() and len(body) != int(declared):
+                raise ProbeError(f"truncated response: {len(body)} of {declared} declared bytes")
             return HttpResponse(status=response.status, reason=response.reason, body=body)
         except (ProbeError, ProxyError, OSError, http.client.HTTPException) as exc:
             if deadline.fired or isinstance(exc, TimeoutError):

@@ -61,6 +61,13 @@ def parse_torproject(body: bytes) -> tuple[str, bool | None]:
     # Strict typing: a string such as "false" must never be read as a positive verdict.
     if not isinstance(is_tor, bool):
         raise ValueError("IsTor must be a JSON boolean")
+    if not is_tor:
+        # A Tor-negative verdict is decisive and must survive even if the address is odd:
+        # dropping it as a parse error would let the remaining providers outvote it.
+        try:
+            return normalize_ip(str(address)), False
+        except ValueError:
+            return (str(address).strip()[:64] or "<missing>"), False
     if not isinstance(address, str):
         raise ValueError("IP must be a JSON string")
     return normalize_ip(address), is_tor

@@ -34,6 +34,7 @@ exit codes:
   3  configuration error
   4  runtime error (no result could be produced)
   5  another rotation holds the lock; nothing was changed
+  130  interrupted (SIGINT, or a second stop signal during "watch")
 """
 
 

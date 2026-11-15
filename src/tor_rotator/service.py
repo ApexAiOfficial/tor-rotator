@@ -6,12 +6,14 @@ Rotation state machine (see ``docs/ARCHITECTURE.md``)::
          -> apply success policy -> persist state/metrics -> unlock
 
 Control-plane facts (accepted, applied) and data-plane facts (verified, exit changed) are
-recorded separately. A failure at any step is captured in the result; it is never
-reported as success, and it never skips persistence.
+recorded separately. A controlled failure (any ``TorRotatorError`` or ``OSError``) at any
+step is captured in the result: it is never reported as success, and it never skips
+persistence. Only unexpected internal errors propagate; ``watch`` logs and survives them.
 """
 
 from __future__ import annotations
 
+import ipaddress
 import logging
 import os
 import secrets
@@ -24,7 +26,7 @@ from typing import Protocol
 
 from . import metrics
 from ._net import is_loopback_address
-from .config import AppConfig, SocksConfig, is_loopback_host
+from .config import AppConfig, SocksConfig
 from .control import ControlBackend, TorControlClient
 from .errors import ExitCode, LockBusyError, StateError, TorRotatorError
 from .lock import ProcessLock
@@ -63,9 +65,9 @@ class TorRotatorService:
     ) -> None:
         config.validate()
         self.config = config
-        self.verifier = verifier or ExitVerifier(config.socks, config.verify)
-        self._control_factory = control_factory or self._default_control
         self._stop = threading.Event()
+        self.verifier = verifier or ExitVerifier(config.socks, config.verify, cancelled=self._stop.is_set)
+        self._control_factory = control_factory or self._default_control
         self._sleep: Callable[[float], object] = sleep or self._stop.wait
         self._clock = clock
         self._uniform = uniform or secrets.SystemRandom().uniform
@@ -97,7 +99,7 @@ class TorRotatorService:
                 control_status = control.status()
         except (TorRotatorError, OSError) as exc:
             control_status = ControlStatus(connected=False, authenticated=False, error=str(exc))
-        exit_status = self.verifier.verify()
+        exit_status = self._verify_safely()
         checks = _health_checks(control_status, exit_status, self.config.socks)
         return HealthReport(
             healthy=all(check.ok for check in checks),
@@ -122,7 +124,7 @@ class TorRotatorService:
         requested_at = utc_now_iso()
         LOG.info("rotation started", extra={"request_id": request_id})
 
-        before = self.verifier.verify()
+        before = self._verify_safely()
         accepted = applied = False
         confirmation_ms: int | None = None
         after = VerificationResult.unavailable("rotation did not reach post-rotation verification")
@@ -172,13 +174,19 @@ class TorRotatorService:
         attempts = 0
         for attempt in range(1, max_attempts + 1):
             attempts = attempt
-            after = self.verifier.verify()
+            after = self._verify_safely()
             if after.ok and (not want_change or after.ip != before.ip):
                 break
             if attempt == max_attempts or self.stopping:
                 break
             self._sleep(verify_cfg.retry_delay_seconds)
         return after, attempts
+
+    def _verify_safely(self) -> VerificationResult:
+        try:
+            return self.verifier.verify()
+        except (TorRotatorError, OSError) as exc:
+            return VerificationResult.unavailable(f"verification could not run: {exc}")
 
     def _policy_error(self, before: VerificationResult, after: VerificationResult) -> str | None:
         if not after.ok:
@@ -300,7 +308,13 @@ def _listener_matches(listener: str, socks: SocksConfig) -> bool:
     if not sep or not port.isdigit() or int(port) != socks.port:
         return False
     host = host.strip("[]")
-    return host == socks.host or (is_loopback_address(host) and is_loopback_host(socks.host))
+    configured = socks.host.strip().strip("[]")
+    if configured.lower() == "localhost":
+        return is_loopback_address(host)  # localhost may resolve to either family
+    try:
+        return ipaddress.ip_address(host) == ipaddress.ip_address(configured)
+    except ValueError:
+        return host == configured
 
 
 def _health_checks(

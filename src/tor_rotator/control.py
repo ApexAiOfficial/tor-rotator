@@ -10,10 +10,8 @@ Reference: Tor control-spec (https://spec.torproject.org/control-spec/).
 
 from __future__ import annotations
 
-import contextlib
 import hashlib
 import hmac
-import io
 import os
 import re
 import secrets
@@ -183,7 +181,8 @@ class TorControlClient:
         self._password = password
         self._clock = clock
         self._socket: socket.socket | None = None
-        self._reader: io.BufferedReader | None = None
+        self._buffer = bytearray()
+        self._deadline = 0.0
         self._events: list[tuple[ReplyLine, ...]] = []
         self._reply_bytes = 0
         self._broken = False
@@ -212,12 +211,8 @@ class TorControlClient:
 
     def close(self) -> None:
         """Close the connection. Idempotent."""
-        reader, sock = self._reader, self._socket
-        self._reader = None
-        self._socket = None
-        if reader is not None:
-            with contextlib.suppress(OSError):
-                reader.close()
+        sock, self._socket = self._socket, None
+        self._buffer.clear()
         if sock is not None:
             sock.close()
 
@@ -239,7 +234,7 @@ class TorControlClient:
 
     def _attach(self, sock: socket.socket) -> None:
         self._socket = sock
-        self._reader = sock.makefile("rb")
+        self._buffer.clear()
         self._broken = False
 
     # --------------------------------------------------------------- wire I/O
@@ -255,26 +250,41 @@ class TorControlClient:
             self._broken = True
             raise ControlError(f"unable to send Tor control command: {exc}") from exc
 
+    def _fail(self, error: ControlError) -> ControlError:
+        self._broken = True
+        return error
+
     def _readline(self) -> str:
-        if self._reader is None or self._broken:
+        """Read one line before ``self._deadline``.
+
+        Each ``recv`` is limited to the time left until the reply's deadline, so a peer that
+        trickles bytes cannot stretch a reply beyond it (a per-``recv`` timeout alone could
+        be stretched almost indefinitely, one byte per timeout).
+        """
+        sock = self._socket
+        if sock is None or self._broken:
             raise ControlError("Tor control connection is not usable")
-        try:
-            raw = self._reader.readline(MAX_LINE_BYTES + 1)
-        except TimeoutError as exc:
-            self._broken = True
-            raise ControlTimeoutError("timed out waiting for Tor control reply") from exc
-        except OSError as exc:
-            self._broken = True
-            raise ControlError(f"unable to read Tor control reply: {exc}") from exc
-        if not raw:
-            self._broken = True
-            raise ControlError("Tor control connection closed unexpectedly")
+        while (newline := self._buffer.find(b"\n")) < 0:
+            if len(self._buffer) > MAX_LINE_BYTES:
+                raise self._fail(ControlError("Tor control reply line exceeded safety limit"))
+            remaining = self._deadline - self._clock()
+            if remaining <= 0:
+                raise self._fail(ControlTimeoutError("timed out waiting for Tor control reply"))
+            try:
+                sock.settimeout(remaining)
+                chunk = sock.recv(65536)
+            except TimeoutError as exc:
+                raise self._fail(ControlTimeoutError("timed out waiting for Tor control reply")) from exc
+            except OSError as exc:
+                raise self._fail(ControlError(f"unable to read Tor control reply: {exc}")) from exc
+            if not chunk:
+                message = "closed mid-line" if self._buffer else "closed unexpectedly"
+                raise self._fail(ControlError(f"Tor control connection {message}"))
+            self._buffer += chunk
+        raw = bytes(self._buffer[: newline + 1])
+        del self._buffer[: newline + 1]
         if len(raw) > MAX_LINE_BYTES:
-            self._broken = True
-            raise ControlError("Tor control reply line exceeded safety limit")
-        if not raw.endswith(b"\n"):
-            self._broken = True
-            raise ControlError("Tor control connection closed mid-line")
+            raise self._fail(ControlError("Tor control reply line exceeded safety limit"))
         self._reply_bytes += len(raw)
         if self._reply_bytes > MAX_REPLY_BYTES:
             self._broken = True
@@ -294,11 +304,16 @@ class TorControlClient:
             # Dot-stuffing: a data line beginning with "." is sent with an extra leading ".".
             lines.append(line[1:] if line.startswith("..") else line)
 
-    def _read_reply(self, *, stop_on_event: bool = False) -> Reply:
+    def _read_reply(self, *, stop_on_event: bool = False, deadline: float | None = None) -> Reply:
         """Read one synchronous reply, queueing any asynchronous events that precede it.
 
         With *stop_on_event*, the first complete asynchronous event is returned instead.
+        The whole reply must arrive before *deadline* (default: ``connect_timeout_seconds``
+        from now).
         """
+        self._deadline = (
+            deadline if deadline is not None else self._clock() + self.config.connect_timeout_seconds
+        )
         self._reply_bytes = 0
         code: int | None = None
         lines: list[ReplyLine] = []
@@ -511,18 +526,12 @@ class TorControlClient:
                     del self._events[index]
                     return queued
             self._events.clear()
-            remaining = deadline - self._clock()
-            sock = self._socket
-            if remaining <= 0 or sock is None:
+            if deadline - self._clock() <= 0 or self._socket is None:
                 return None
-            sock.settimeout(remaining)
             try:
-                reply = self._read_reply(stop_on_event=True)
+                reply = self._read_reply(stop_on_event=True, deadline=deadline)
             except ControlTimeoutError:
                 return None
-            finally:
-                if not self._broken:
-                    sock.settimeout(self.config.connect_timeout_seconds)
             if reply.code != 650:
                 self._broken = True
                 raise ControlError("unexpected synchronous Tor reply while awaiting an event")

@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import socket
 import threading
+import time
 from contextlib import closing
 
 import pytest
@@ -458,13 +459,17 @@ def test_read_error_and_total_reply_limit(monkeypatch):
         peer.close()
 
         class Exploding:
-            def readline(self, size):
+            def settimeout(self, value):
+                return None
+
+            def recv(self, size):
                 raise OSError("reset by peer")
 
             def close(self):
                 return None
 
-        client._reader = Exploding()  # type: ignore[assignment]
+        client._socket = Exploding()  # type: ignore[assignment]
+        client._deadline = time.monotonic() + 5
         with pytest.raises(ControlError, match="reset by peer"):
             client._readline()
         with pytest.raises(ControlError, match="not usable"):
