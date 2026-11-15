@@ -1,0 +1,158 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tor-rotator"
+dynamic = ["version"]
+description = "Verified Tor circuit rotation: authenticated NEWNYM control with independent, quorum-based exit verification."
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "ApexAi Official" }]
+keywords = ["tor", "newnym", "circuit-rotation", "control-protocol", "socks5", "privacy", "exit-verification"]
+classifiers = [
+  "Development Status :: 5 - Production/Stable",
+  "Environment :: Console",
+  "Environment :: No Input/Output (Daemon)",
+  "Intended Audience :: Developers",
+  "Intended Audience :: System Administrators",
+  "Operating System :: POSIX :: Linux",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Topic :: Internet :: Proxy Servers",
+  "Topic :: Security",
+  "Topic :: System :: Networking",
+  "Typing :: Typed",
+]
+# Zero runtime dependencies by design: the SOCKS5 client, HTTPS transport and Tor control
+# protocol client are implemented on the standard library.
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/ApexAiOfficial/tor-rotator"
+Documentation = "https://github.com/ApexAiOfficial/tor-rotator#readme"
+Changelog = "https://github.com/ApexAiOfficial/tor-rotator/blob/main/CHANGELOG.md"
+Issues = "https://github.com/ApexAiOfficial/tor-rotator/issues"
+Security = "https://github.com/ApexAiOfficial/tor-rotator/security/policy"
+
+[project.scripts]
+tor-rotator = "tor_rotator.cli:main"
+
+[dependency-groups]
+test = [
+  "pytest>=9.0,<10",
+  "pytest-cov>=7.0,<8",
+  "pytest-timeout>=2.4,<3",
+  "hypothesis>=6.140,<7",
+  "trustme>=1.2,<2",
+]
+lint = [
+  "ruff>=0.17,<0.18",
+  "mypy>=2.4,<3",
+]
+release = [
+  "build>=1.3,<2",
+  "setuptools>=77",
+  "twine>=6.1",
+  "check-wheel-contents>=0.6,<1",
+]
+security = [
+  "pip-audit>=2.9,<3",
+  "zizmor>=1.30,<2",
+  "actionlint-py>=1.7,<2",
+]
+dev = [
+  { include-group = "test" },
+  { include-group = "lint" },
+  { include-group = "release" },
+  { include-group = "security" },
+  "pre-commit>=4,<5",
+]
+
+[tool.setuptools.dynamic]
+version = { attr = "tor_rotator._version.__version__" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+tor_rotator = ["py.typed"]
+
+# --------------------------------------------------------------------------- pytest
+
+[tool.pytest.ini_options]
+minversion = "9.0"
+addopts = ["-ra", "--strict-markers", "--strict-config", "-m", "not live"]
+testpaths = ["tests"]
+markers = [
+  "live: exercises a real Tor daemon and the Tor network (opt-in; see docs/TESTING.md)",
+]
+filterwarnings = ["error"]
+timeout = 60
+xfail_strict = true
+
+[tool.coverage.run]
+branch = true
+source = ["tor_rotator"]
+
+[tool.coverage.report]
+fail_under = 95
+show_missing = true
+skip_covered = true
+exclude_also = [
+  "if TYPE_CHECKING:",
+  "raise NotImplementedError",
+  "@overload",
+  'if __name__ == "__main__":',
+  "\\.\\.\\.$",
+]
+
+# ----------------------------------------------------------------------------- ruff
+
+[tool.ruff]
+target-version = "py311"
+line-length = 110
+src = ["src", "tests", "scripts"]
+
+[tool.ruff.lint]
+select = [
+  "A", "ARG", "B", "BLE", "C4", "DTZ", "E", "F", "FURB", "G", "I", "ISC", "LOG", "N",
+  "PERF", "PGH", "PIE", "PL", "PT", "RET", "RUF", "S", "SIM", "T20", "TRY", "UP", "W",
+]
+ignore = [
+  "PLR0911",  # many-return dispatch is clearer than nested conditionals here
+  "PLR0912",
+  "PLR0913",
+  "PLR0915",
+  "PLR2004",  # protocol code is full of wire constants; bounds read better inline
+  "TRY004",   # malformed provider/protocol data is a ValueError by contract, not a TypeError
+  "TRY003",   # contextual exception messages are intentional
+  "TRY300",
+  "TRY301",
+  "ISC001",   # conflicts with the formatter
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "S105", "S106", "S108", "PLR2004", "ARG001", "ARG002", "ARG005", "PLC0415", "BLE001", "S104", "T20", "SIM115", "N802", "PT011", "TRY002"]
+"scripts/**" = ["T20", "S603", "S607"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["tor_rotator"]
+
+[tool.ruff.format]
+docstring-code-format = true
+
+# ----------------------------------------------------------------------------- mypy
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_unreachable = true
+warn_unused_ignores = true
+enable_error_code = ["ignore-without-code", "redundant-expr", "truthy-bool", "possibly-undefined"]
+files = ["src/tor_rotator"]
