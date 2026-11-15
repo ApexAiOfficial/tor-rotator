@@ -54,12 +54,15 @@ package() {
 }
 
 security() {
+  # Console scripts live next to the interpreter (venv/bin, or the runner's Python bin).
+  local bindir
+  bindir="$("$PY" -c 'import os, sys; print(os.path.dirname(sys.executable))')"
   step "pip-audit (hash-pinned toolchain)"
   "$PY" -m pip_audit --strict --require-hashes --disable-pip -r requirements/dev.txt
   step "actionlint"
-  "$PY" -m actionlint_py 2>/dev/null || actionlint
+  "$bindir/actionlint"
   step "zizmor (GitHub Actions security)"
-  "$PY" -m zizmor --offline --min-severity low .github/workflows
+  "$bindir/zizmor" --offline --min-severity low .github/workflows
 }
 
 case "$STAGE" in

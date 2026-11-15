@@ -1,0 +1,39 @@
+name: Bug report
+description: Something does not work as documented.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Security problems must be reported privately: see SECURITY.md.
+        Redact anything sensitive. Results contain Tor exit IPs, which are public relay addresses.
+  - type: input
+    id: version
+    attributes:
+      label: tor-rotator version
+      description: Output of `tor-rotator --version`
+    validations:
+      required: true
+  - type: input
+    id: tor
+    attributes:
+      label: Tor version and distribution
+      placeholder: Tor 0.4.8.16 on Debian 13
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Command, JSON result and stderr log
+      render: shell
+  - type: textarea
+    id: config
+    attributes:
+      label: Redacted `tor-rotator config` output
+      render: json
