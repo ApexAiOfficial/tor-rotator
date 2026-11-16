@@ -119,3 +119,16 @@ def test_resolve_preserves_order_and_supports_custom_providers():
 def test_resolve_rejects_unknown():
     with pytest.raises(KeyError):
         resolve(["nope"])
+
+
+@pytest.mark.parametrize(
+    ("body", "expected_ip"),
+    [
+        ('{"IsTor": false, "IP": "10.0.0.1"}', "10.0.0.1"),
+        ('{"IsTor": false, "IP": "garbage"}', "garbage"),
+        ('{"IsTor": false}', "None"),
+        ('{"IsTor": false, "IP": ""}', "<missing>"),
+    ],
+)
+def test_tor_negative_verdict_survives_unusual_addresses(body, expected_ip):
+    assert parse_torproject(body.encode()) == (expected_ip, False)

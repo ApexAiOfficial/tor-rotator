@@ -162,3 +162,9 @@ def test_total_deadline_covers_socks_negotiation():
         done.set()
         thread.join(5)
         listener.close()
+
+
+def test_truncated_response_is_rejected(socks, echo, ca_file):
+    echo.responses["api.ipify.org"] = EchoResponse(b"185.220.10", headers={"Content-Length": "13"})
+    with pytest.raises(ProbeError, match="truncated|EOF|IncompleteRead"):
+        get(socks, ca_file, "https://api.ipify.org/")

@@ -31,7 +31,9 @@ SupplementaryGroups=debian-tor
 ExecStart=/opt/tor-rotator/venv/bin/tor-rotator --config /etc/tor-rotator/config.toml watch
 Restart=on-failure
 RestartSec=30s
-TimeoutStopSec=60s
+# SIGTERM stops after the current probe (verification checks for stop requests between
+# probes); a second signal interrupts immediately.
+TimeoutStopSec=90s
 Environment=PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 
 StateDirectory=tor-rotator

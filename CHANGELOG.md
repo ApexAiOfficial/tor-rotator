@@ -72,6 +72,26 @@ unless they relied on behaviour that was unsafe (see *Breaking changes*).
 - CI on Python 3.11–3.14, CodeQL, zizmor, actionlint, gitleaks, pip-audit, OpenSSF Scorecard,
   hash-pinned toolchain, SHA-pinned actions, and attested release artifacts.
 
+### Hardening from independent review
+
+An independent multi-pass review (security, correctness, integration, failure modes)
+before publication led to these changes:
+
+- The probe watchdog also covers the SOCKS negotiation and the TLS handshake. Control-protocol
+  replies get a total deadline (a trickling listener can no longer hold a reply open).
+- Truncated HTTP bodies are rejected. A configured CA file must be a regular file that is not
+  world-writable.
+- A Tor-negative verdict survives an unusual address field; only Tor-authoritative providers
+  may vouch for or against Tor.
+- Controlled verifier errors during a rotation are recorded and persisted as failures instead
+  of escaping. A stop request cancels verification between probes, and the systemd unit
+  allows 90 s to stop.
+- doctor's SOCKS-listener check no longer equates `127.0.0.1` with `[::1]` (only `localhost`
+  matches either). Bracketed IPv6 hosts connect correctly.
+- `--help` documents exit code 130. The Debian quick start, metrics under the hardened unit
+  (`deploy/systemd/metrics.conf`) and `max_consecutive_failures` semantics are documented
+  accurately.
+
 ### Breaking changes
 
 - Distinct exit codes: `3` configuration error, `4` runtime error, `5` rotation lock held

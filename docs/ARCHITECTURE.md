@@ -99,7 +99,13 @@ functionality disabled) never produce the event.
   link-local, CGNAT, documentation and reserved ranges, and IPv4-mapped IPv6 addresses are
   canonicalised to IPv4.
 - **IPv4-only endpoints.** IP-only built-ins use IPv4-only hostnames so that a dual-stack
-  endpoint cannot report an IPv6 address while its peers report IPv4.
+  endpoint cannot report an IPv6 address while its peers report IPv4. The Tor authority,
+  check.torproject.org, has no IPv4-only name. Exits connect to dual-stack destinations over
+  IPv4 unless the client requests `PreferIPv6`, so in practice it reports IPv4. An IPv6 answer
+  would surface as a disagreement and fail closed, never as a false success.
+- **Only Tor-authoritative providers vouch for Tor.** An `IsTor` verdict is honoured only from a
+  provider flagged as Tor-authoritative, and a Tor-negative verdict survives even if its address
+  field is unusual (so it can never be dropped as a parse error and outvoted).
 
 ## Transport design
 

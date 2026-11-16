@@ -74,15 +74,13 @@ class ExitVerifier:
         while True:
             rounds += 1
             observations = tuple(self._probe(p, fetch) for p in self._providers)
-            if self._cancelled():
-                break
             outcome = consensus.evaluate(
                 observations,
                 quorum=self.config.quorum,
                 require_unanimous=self.config.require_unanimous,
                 require_tor_confirmation=self.config.require_tor_confirmation,
             )
-            if not outcome.resample or rounds >= self.config.max_rounds:
+            if not outcome.resample or rounds >= self.config.max_rounds or self._cancelled():
                 break
         return VerificationResult(
             ok=outcome.ok,

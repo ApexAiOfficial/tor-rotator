@@ -90,6 +90,7 @@ max_consecutive_failures = 0
 state_file = "/var/lib/tor-rotator/state.json"
 lock_file = "/var/lib/tor-rotator/rotate.lock"
 # Prometheus textfile-collector output (no exit IPs are exported).
+# Under the hardened systemd unit, also install deploy/systemd/metrics.conf (ReadWritePaths=).
 # metrics_file = "/var/lib/prometheus/node-exporter/tor_rotator.prom"
 log_format = "json"
 log_level = "INFO"

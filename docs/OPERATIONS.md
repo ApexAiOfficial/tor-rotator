@@ -40,7 +40,12 @@ persisted (disk full, permissions) or a corrupt state file was reset.
 - **`verify.attempts_after_rotation` / `retry_delay_seconds`**: govern how long a rotation
   keeps trying to verify (and, with `require_exit_change`, to observe a new exit).
 - **`rotation.max_consecutive_failures`**: let systemd restart the service (and alert) after
-  sustained failure instead of retrying forever.
+  sustained failure instead of retrying forever. The limit counts within one `watch` process;
+  `tor_rotator_consecutive_failures` keeps the persisted streak across restarts.
+- **Stopping:** SIGTERM finishes the current step and stops. Verification checks for a stop
+  request between probes, so a stop takes at most about one probe timeout plus the NEWNYM
+  confirmation window; the shipped unit allows 90 s. A second signal interrupts immediately
+  (exit 130).
 
 ## Monitoring
 

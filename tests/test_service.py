@@ -334,7 +334,12 @@ def test_full_stack_doctor(stack):
     [
         ("127.0.0.1:9050", SocksConfig(), True),
         ("127.0.0.1:9050", SocksConfig(host="localhost"), True),
-        ("[::1]:9050", SocksConfig(), True),
+        ("[::1]:9050", SocksConfig(), False),
+        ("[::1]:9050", SocksConfig(host="localhost"), True),
+        ("[::1]:9050", SocksConfig(host="::1"), True),
+        ("[::1]:9050", SocksConfig(host="[::1]"), True),
+        ("127.0.0.2:9050", SocksConfig(), False),
+        ("tor:9050", SocksConfig(host="tor", allow_non_loopback=True), True),
         ("127.0.0.1:9150", SocksConfig(), False),
         ("garbage", SocksConfig(), False),
         ("unix:/run/tor/socks", SocksConfig(), False),
@@ -468,3 +473,30 @@ def test_unix_socket_full_stack(short_tmp, echo, ca_file):
         assert svc.health().healthy
         assert svc.rotate().operation_succeeded
     assert os.path.exists(short_tmp / "state.json")
+
+
+class Raising:
+    def __init__(self, exc):
+        self.exc = exc
+
+    def verify(self):
+        raise self.exc
+
+
+def test_controlled_verifier_errors_are_persisted_as_failures(tmp_path):
+    from tor_rotator.errors import ProbeError
+
+    svc = service(tmp_path, Raising(ProbeError("trust store vanished")))
+    result = svc.rotate()
+    assert not result.operation_succeeded
+    assert "verification could not run" in (result.before.error or "")
+    assert svc_state(tmp_path)["counters"]["rotations_failed"] == 1
+    assert not service(tmp_path, Raising(OSError("disk"))).health().healthy
+
+
+def test_default_verifier_observes_stop_requests(tmp_path):
+    svc = TorRotatorService(offline_config(tmp_path), control_factory=FakeControl)
+    svc.request_stop()
+    result = svc.verifier.verify()
+    assert not result.ok
+    assert all(o.error == "cancelled: stop requested" for o in result.observations)

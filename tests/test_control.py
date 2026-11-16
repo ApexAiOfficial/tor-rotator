@@ -468,6 +468,7 @@ def test_read_error_and_total_reply_limit(monkeypatch):
             def close(self):
                 return None
 
+        client._socket.close()  # type: ignore[union-attr]
         client._socket = Exploding()  # type: ignore[assignment]
         client._deadline = time.monotonic() + 5
         with pytest.raises(ControlError, match="reset by peer"):
@@ -490,3 +491,30 @@ def test_status_reraises_non_552_errors(monkeypatch):
     monkeypatch.setattr(client, "getinfo", fail)
     with pytest.raises(ControlCommandError, match="551"):
         client.status()
+
+
+def test_reply_deadline_defeats_a_trickling_listener():
+    client, peer = wired(b"", connect_timeout_seconds=0.5)
+    stop = threading.Event()
+
+    def trickle() -> None:
+        for byte in b"250-version=0.4.8.16-and-much-more\r\n" * 10:
+            if stop.is_set():
+                return
+            try:
+                peer.sendall(bytes([byte]))
+            except OSError:
+                return
+            time.sleep(0.05)
+
+    thread = threading.Thread(target=trickle)
+    thread.start()
+    started = time.monotonic()
+    try:
+        with closing(client), pytest.raises(ControlError, match="timed out"):
+            client._read_reply()
+        assert time.monotonic() - started < 1.5
+    finally:
+        stop.set()
+        thread.join(5)
+        peer.close()

@@ -86,9 +86,8 @@ def test_provider_names():
 def test_bad_ca_file_is_a_configuration_error(tmp_path):
     bad = tmp_path / "ca.pem"
     bad.write_text("not a certificate")
-    verifier = ExitVerifier(SocksConfig(), VerifyConfig(ca_file=str(bad)))
     with pytest.raises(ConfigurationError, match="trust store"):
-        verifier.verify()
+        ExitVerifier(SocksConfig(), VerifyConfig(ca_file=str(bad)))
 
 
 # --- End to end through the fake SOCKS proxy and TLS echo servers ------------------------
@@ -199,3 +198,46 @@ def test_single_round_configuration():
     result = ExitVerifier(SocksConfig(), VerifyConfig(max_rounds=1), fetch=rounds).verify()
     assert result.rounds == 1
     assert rounds.calls == 3
+
+
+def test_ca_file_must_be_safe(tmp_path, ca_file):
+    import shutil
+
+    unsafe = tmp_path / "ca.pem"
+    shutil.copy(ca_file, unsafe)
+    unsafe.chmod(0o666)
+    with pytest.raises(ConfigurationError, match="world-writable"):
+        ExitVerifier(SocksConfig(), VerifyConfig(ca_file=str(unsafe)))
+    with pytest.raises(ConfigurationError, match="not a regular file"):
+        ExitVerifier(SocksConfig(), VerifyConfig(ca_file=str(tmp_path)))
+    with pytest.raises(ConfigurationError, match="trust store"):
+        ExitVerifier(SocksConfig(), VerifyConfig(ca_file=str(tmp_path / "missing.pem")))
+    big = tmp_path / "big.pem"
+    big.write_bytes(b"x" * (4 * 1024 * 1024 + 1))
+    with pytest.raises(ConfigurationError, match="exceeds"):
+        ExitVerifier(SocksConfig(), VerifyConfig(ca_file=str(big)))
+
+
+def test_only_tor_authoritative_providers_can_vouch_for_tor():
+    from tor_rotator.providers import Provider
+
+    config = VerifyConfig(require_tor_confirmation=False, quorum=1, providers=("ipify",))
+    verifier = ExitVerifier(SocksConfig(), config, fetch=fetcher({"impostor": ok("x")}))
+    verifier._providers = (Provider("impostor", "https://impostor/", lambda body: (EXIT_A, True)),)
+    result = verifier.verify()
+    assert result.observations[0].is_tor is None
+    assert result.tor_confirmed is None
+
+
+def test_cancellation_stops_probing_between_providers():
+    calls = []
+
+    def fetch(url):
+        calls.append(url)
+        return standard()[next(k for k in ("torproject", "ipify", "icanhazip") if k in url)]
+
+    verifier = ExitVerifier(SocksConfig(), VerifyConfig(), fetch=fetch, cancelled=lambda: len(calls) >= 1)
+    result = verifier.verify()
+    assert len(calls) == 1
+    assert [o.error for o in result.observations[1:]] == ["cancelled: stop requested"] * 2
+    assert result.rounds == 1

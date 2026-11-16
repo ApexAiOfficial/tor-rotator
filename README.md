@@ -214,11 +214,15 @@ that runs Tor Rotator membership of the `debian-tor` group and use
 [`deploy/config.debian.toml`](deploy/config.debian.toml):
 
 ```bash
-sudo usermod -aG debian-tor "$USER"          # interactive use (log in again afterwards)
-sudo install -d -m 0750 /etc/tor-rotator
-sudo install -m 0640 deploy/config.debian.toml /etc/tor-rotator/config.toml
-tor-rotator --config /etc/tor-rotator/config.toml --pretty doctor
+sudo usermod -aG debian-tor "$USER"          # log in again afterwards
+tor-rotator --config deploy/config.debian.toml --pretty doctor
+tor-rotator --config deploy/config.debian.toml --pretty verify
 ```
+
+`rotate` and `watch` also write state under `/var/lib/tor-rotator`; for interactive use,
+copy the profile and point `[runtime]` at a directory you own. For a service, follow
+[Automation](#automation): the config contains no secrets, and the systemd unit's
+account reads it through its group.
 
 ### Other distributions
 
@@ -279,7 +283,7 @@ every key. Loading is strict:
 | `jitter_seconds` | `0.0` | Uniform random extra delay per cycle, in [0, interval). |
 | `settle_seconds` | `1.0` | Pause after a confirmed NEWNYM before verifying, in [0, 60]. |
 | `require_exit_change` | `false` | Succeed only on a verified change of exit IP. |
-| `max_consecutive_failures` | `0` | `watch` exits with status 1 after this many failures in a row (0 = never). |
+| `max_consecutive_failures` | `0` | `watch` exits with status 1 after this many failures in a row within one process (0 = never). The persisted streak in state and metrics is not reset by a restart. |
 | **`[runtime]`** | | |
 | `state_file` | `"/var/lib/tor-rotator/state.json"` | Persisted state (mode 0640, atomic writes). |
 | `lock_file` | `"/var/lib/tor-rotator/rotate.lock"` | Single-writer rotation lock. |
@@ -417,7 +421,10 @@ treated as success.
 ### Monitoring
 
 Set `runtime.metrics_file` to a node_exporter textfile-collector path (or run
-`tor-rotator metrics`). Exported series include `tor_rotator_rotations_total{outcome}`,
+`tor-rotator metrics`). The hardened unit's filesystem is read-only outside its state
+directory, so also install [`metrics.conf`](deploy/systemd/metrics.conf) as a drop-in
+(`ReadWritePaths=` for the collector directory), and make that directory writable by the
+`tor-rotator` account. Exported series include `tor_rotator_rotations_total{outcome}`,
 `tor_rotator_exit_changes_total`, `tor_rotator_consecutive_failures`,
 `tor_rotator_last_success_timestamp_seconds`, `tor_rotator_last_rotation_success`,
 `tor_rotator_exit_verified` and `tor_rotator_build_info`. Exit IP addresses are never
