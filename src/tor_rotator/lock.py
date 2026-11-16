@@ -24,7 +24,7 @@ class ProcessLock:
     def __enter__(self) -> ProcessLock:
         try:
             self.path.parent.mkdir(parents=True, exist_ok=True, mode=0o750)
-            fd = os.open(self.path, os.O_CREAT | os.O_RDWR | os.O_CLOEXEC | os.O_NOFOLLOW, 0o640)
+            fd = os.open(self.path, os.O_CREAT | os.O_RDWR | os.O_CLOEXEC | os.O_NOFOLLOW, 0o600)
         except OSError as exc:
             raise TorRotatorError(f"cannot open rotation lock {self.path}: {exc.strerror or exc}") from exc
         try:

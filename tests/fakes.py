@@ -435,6 +435,7 @@ class FakeHttps:
     def __init__(self, ca: trustme.CA) -> None:
         cert = ca.issue_cert(*PROVIDER_HOSTS)
         context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+        context.minimum_version = ssl.TLSVersion.TLSv1_2
         cert.configure_cert(context)
         self.responses: dict[str, EchoResponse] = {}
         self.requests: list[dict[str, str]] = []

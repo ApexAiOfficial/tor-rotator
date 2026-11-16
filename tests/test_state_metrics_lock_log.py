@@ -167,6 +167,7 @@ def test_lock_is_exclusive_and_released(tmp_path):
     path = tmp_path / "locks" / "rotate.lock"
     with ProcessLock(path):
         assert path.read_text().strip() == str(os.getpid())
+        assert path.stat().st_mode & 0o777 == 0o600
         with pytest.raises(LockBusyError, match="another rotation"):
             ProcessLock(path).__enter__()
     with ProcessLock(path):
