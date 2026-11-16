@@ -16,5 +16,9 @@ updates:
     groups:
       toolchain:
         patterns: ["*"]
+    ignore:
+      # check-wheel-contents pins wheel-filename~=1.1; a 2.x lock is unresolvable.
+      - dependency-name: wheel-filename
+        versions: [">=2"]
     commit-message:
       prefix: deps
