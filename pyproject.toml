@@ -65,6 +65,7 @@ security = [
   "pip-audit>=2.9,<3",
   "zizmor>=1.30,<2",
   "actionlint-py>=1.7,<2",
+  "shellcheck-py>=0.10,<1",  # actionlint checks `run:` scripts with shellcheck when present
 ]
 dev = [
   { include-group = "test" },

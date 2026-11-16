@@ -59,8 +59,8 @@ security() {
   bindir="$("$PY" -c 'import os, sys; print(os.path.dirname(sys.executable))')"
   step "pip-audit (hash-pinned toolchain)"
   "$PY" -m pip_audit --strict --require-hashes --disable-pip -r requirements/dev.txt
-  step "actionlint"
-  "$bindir/actionlint" .github/workflows/*.yml
+  step "actionlint (+ shellcheck on run: scripts)"
+  PATH="$bindir:$PATH" "$bindir/actionlint" .github/workflows/*.yml
   step "zizmor (GitHub Actions security)"
   "$bindir/zizmor" --offline --min-severity low .github/workflows
 }
